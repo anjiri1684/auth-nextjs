@@ -2,6 +2,9 @@ import { hashPassword } from "../../../lib/auth";
 import { connectToDatabase } from "../../../lib/db";
 
 async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
   const data = req.body;
 
   const { email, password } = data;
@@ -10,7 +13,7 @@ async function handler(req, res) {
     !email ||
     !email.includes("@") ||
     !password ||
-    password.trim().length > 7
+    password.trim().length < 7
   ) {
     res.status(422).json({
       message:
@@ -21,8 +24,17 @@ async function handler(req, res) {
   const client = await connectToDatabase();
 
   const db = client.db();
+  const existingUser = await db.collection("users").findOne({
+    email: email,
+  });
 
-  const hashedPassword = hashPassword(password);
+  if (existingUser) {
+    res.status(422).json({ message: "Email already in use." });
+    client.close();
+    return;
+  }
+
+  const hashedPassword = await hashPassword(password);
 
   const result = db.collection("users").insertOne({
     email: email,
@@ -30,6 +42,7 @@ async function handler(req, res) {
   });
 
   res.status(201).json({ message: "Created user!" });
+  client.close();
 }
 
 export default handler;
